@@ -1,4 +1,4 @@
 pandas
 usaddress
-scourgify
+git+https://github.com/GreenBuildingRegistry/usaddress-scourgify.git
 streamlit
