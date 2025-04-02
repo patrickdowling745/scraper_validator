@@ -9,7 +9,6 @@ st.title("📋 Scraping Validator Tool")
 
 st.write("The file must contain the following columns: 'Address', 'Scraped Address', 'Owner', 'Scraped Owner'")
 
-
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file is not None:
@@ -17,13 +16,18 @@ if uploaded_file is not None:
     df.columns = df.columns.str.strip()  # Clean header spaces
 
     required_columns = ['Address', 'Scraped Address', 'Owner', 'Scraped Owner']
+    
+    # Validate required columns exist
     missing_cols = [col for col in required_columns if col not in df.columns]
     if missing_cols:
-        st.error(f"Missing required columns: {missing_cols}")
+        st.error(f"❌ Missing required columns: {missing_cols}")
     else:
+        # Clean and prepare data
+        df = df.applymap(lambda x: str(x).strip() if isinstance(x, str) else x).fillna('')
+
         results = []
 
-        for i, row in df.iterrows():
+        for _, row in df.iterrows():
             address_match = "Pass"
             address_mismatch_reason = ""
             owner_match = "Pass"
@@ -31,8 +35,9 @@ if uploaded_file is not None:
 
             # --- Address Comparison ---
             try:
-                tp_addr = str(row['Address'])
-                scraped_addr = str(row['Scraped Address']).replace('\n', ' ')
+                tp_addr = row['Address']
+                scraped_addr = row['Scraped Address'].replace('\n', ' ')
+                
                 formatted_tp_addr = format_address_record(normalize_address_record(tp_addr))
                 formatted_scraped_addr = format_address_record(normalize_address_record(scraped_addr))
 
@@ -41,44 +46,27 @@ if uploaded_file is not None:
 
                 mismatch_reasons = []
 
-                if tp_tags.get('AddressNumber') != scraped_tags.get('AddressNumber'):
-                    mismatch_reasons.append(
-                        f'Street number mismatch: "{tp_tags.get("AddressNumber")}" vs "{scraped_tags.get("AddressNumber")}"'
-                    )
-                if tp_tags.get('StreetName') != scraped_tags.get('StreetName'):
-                    mismatch_reasons.append(
-                        f'Street name mismatch: "{tp_tags.get("StreetName")}" vs "{scraped_tags.get("StreetName")}"'
-                    )
-                if tp_tags.get('StreetNamePreDirectional') != scraped_tags.get('StreetNamePreDirectional'):
-                    mismatch_reasons.append(
-                        f'Pre-directional mismatch: "{tp_tags.get("StreetNamePreDirectional")}" vs "{scraped_tags.get("StreetNamePreDirectional")}"'
-                    )
-                if tp_tags.get('StreetNamePostType') != scraped_tags.get('StreetNamePostType'):
-                    mismatch_reasons.append(
-                        f'Suffix mismatch: "{tp_tags.get("StreetNamePostType")}" vs "{scraped_tags.get("StreetNamePostType")}"'
-                    )
-                if tp_tags.get('StreetNamePostDirectional') != scraped_tags.get('StreetNamePostDirectional'):
-                    mismatch_reasons.append(
-                        f'Post-directional mismatch: "{tp_tags.get("StreetNamePostDirectional")}" vs "{scraped_tags.get("StreetNamePostDirectional")}"'
-                    )
+                address_components = ['AddressNumber', 'StreetName', 'StreetNamePreDirectional', 'StreetNamePostType', 'StreetNamePostDirectional']
+                for comp in address_components:
+                    if tp_tags.get(comp) != scraped_tags.get(comp):
+                        mismatch_reasons.append(
+                            f'{comp} mismatch: "{tp_tags.get(comp)}" vs "{scraped_tags.get(comp)}"'
+                        )
 
                 if mismatch_reasons:
                     address_match = "Fail"
                     address_mismatch_reason = "; ".join(mismatch_reasons)
 
-            except UnParseableAddressError:
+            except (UnParseableAddressError, Exception) as e:
                 address_match = "Fail"
-                address_mismatch_reason = "Unparseable address"
+                address_mismatch_reason = f"Address parsing error: {str(e)}"
 
             # --- Owner Comparison ---
-            tp_owner = str(row['Owner']).upper().strip()
-            scraped_owner = str(row['Scraped Owner']).upper().strip()
+            tp_owner = row['Owner'].upper()
+            scraped_owner = row['Scraped Owner'].upper()
             similarity = SequenceMatcher(None, tp_owner, scraped_owner).ratio()
 
-            if tp_owner == scraped_owner:
-                owner_match = "Pass"
-                owner_mismatch_reason = "Exact match"
-            elif similarity >= 0.75:
+            if similarity >= 0.75:
                 owner_match = "Pass"
                 owner_mismatch_reason = f"Similar enough ({similarity:.0%})"
             else:
@@ -92,7 +80,7 @@ if uploaded_file is not None:
                 "Owner Mismatch Reason": owner_mismatch_reason
             })
 
-        # Combine original data with results
+        # Combine results with original data
         result_df = pd.concat([df, pd.DataFrame(results)], axis=1)
 
         st.subheader("🔍 Validation Results")
@@ -106,3 +94,4 @@ if uploaded_file is not None:
             file_name="validated_results.csv",
             mime='text/csv',
         )
+
