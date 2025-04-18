@@ -2,3 +2,6 @@ pandas
 usaddress
 git+https://github.com/GreenBuildingRegistry/usaddress-scourgify.git
 streamlit
+rapidfuzz
+
+
