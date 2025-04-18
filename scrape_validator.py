@@ -255,10 +255,10 @@ if uploaded_file is not None:
 
                 if best_owner_score > 80 and best_scraped_score > 80:
                     owner_match = 'Pass'
-                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% match to entity list"
+                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% match to Progress Residential entity list"
                 else:
                     owner_match = 'Fail'
-                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% — not both above 80%"
+                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% — not both above 80% when comparing to Progress Residential entity list"
             else:
                 tp_owner = row['Owner'].upper()
                 scraped_owner = row['Scraped Owner'].upper()
