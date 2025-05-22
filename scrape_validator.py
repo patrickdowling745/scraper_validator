@@ -8,7 +8,7 @@ from rapidfuzz import fuzz
 import re
 
 # Entity list
-entities = [
+progress_entities = [
     "Berm FW Residential Home Buyer Atlanta, LLC",
     "Berm FW Residential Home Buyer Charlotte, LLC",
     "Berm FW Residential Home Buyer Dallas, LLC",
@@ -185,6 +185,81 @@ entities = [
     "Yamasa Co., Ltd."
 ]
 
+
+amherst_entities = [
+    "ALTO Asset Company 1, LLC",
+    "ALTO Asset Company 2, LLC",
+    "ALTO Asset Company 3, LLC",
+    "ALTO Asset Company 4, LLC",
+    "ALTO Asset Company 5, LLC",
+    "Amherst Group Properties, LLC",
+    "AMLUX Allison Courtyard JV, LLC",
+    "AMNL Asset Company 1 LLC",
+    "AMNL Asset Company 2 LLC",
+    "AMNL Asset Company 3 LLC",
+    "ARMM Asset Company 1 LLC",
+    "ARMM Asset Company 2 LLC",
+    "ARMM Assets 2 LLC",
+    "ARVM 5, LLC",
+    "BAF 1 TRS, LLC",
+    "BAF 1, LLC",
+    "BAF 2 TRS, LLC",
+    "BAF 2, LLC",
+    "BAF 3, LLC",
+    "BAF 4, LLC",
+    "BAF Assets 2, LLC",
+    "BAF Assets 3, LLC",
+    "BAF Assets 4, LLC",
+    "BAF Assets 5, LLC",
+    "BAF Assets 6, LLC",
+    "BAF Assets, LLC",
+    "Bella Villas Owner, L.L.C.",
+    "BTR Scattered Site Owner 2, L.L.C.",
+    "CBAR Asset Company LLC",
+    "CPI Amherst SFR Program Owner, LLC",
+    "CPI/AMHERST SFR PROGRAM II OWNER, L.L.C.",
+    "CPI/Amherst SFR Program II RS, L.L.C.",
+    "CPI/Amherst SFR Program RS, L.L.C.",
+    "EPH 2 ASSETS, LLC",
+    "GVII RS TRS, LLC",
+    "GVII-RS OwnerCo, LLC",
+    "JEFF 1, LLC",
+    "LAMCO Asset Company 1, LLC",
+    "LAMCO Asset Company 2, LLC",
+    "LAMCO TN Asset Company 1, LLC",
+    "LAMCO TN Asset Company 2, LLC",
+    "Mermaid Borrower LLC",
+    "Mesa Verde Assets, LLC",
+    "Montpelier Assets, LLC",
+    "MUPR 3 ASSETS, LLC",
+    "RH Evergreen Owner Co, LLC",
+    "RH Partners EquityCo, LLC",
+    "RH Partners OwnerCo 2, LLC",
+    "RH Partners OwnerCo, LLC",
+    "RH Partners Warehouse OwnerCo, LLC",
+    "RHP Asset 1",
+    "RHP Asset 2",
+    "RHP OC 2 Asset 1",
+    "RHP OC 2 Asset 2",
+    "SRAM Pack I-A, L.L.C.",
+    "SRAM Pack I-B, L.L.C.",
+    "SRAM Pack I-C, L.L.C.",
+    "SRAM Pack I-D, L.L.C.",
+    "SRMZ 3 Holdings - Assets",
+    "SRMZ 4 Asset Company 3, LLC",
+    "Sunbelt Inv Asset Company",
+    "VM Master Issuer, LLC",
+    "VM Pronto, LLC",
+    "VMP Lockhart Properties, LLC",
+    "VMP Scattered Properties, LLC"
+]
+
+
+
+
+
+
+
 # Fuzzy function
 def fuzzy(text, text1):
     normalize = re.sub(r'[,\.\-\(\)]','',text).lower()
@@ -249,7 +324,21 @@ if uploaded_file is not None:
             elif org == 'progress residential':
                 best_owner_score = 0
                 best_scraped_score = 0
-                for entity in entities: 
+                for entity in progress_entities: 
+                    best_owner_score = max(best_owner_score, fuzzy(row['Owner'], entity))
+                    best_scraped_score = max(best_scraped_score, fuzzy(row['Scraped Owner'], entity))
+
+                if best_owner_score > 80 and best_scraped_score > 80:
+                    owner_match = 'Pass'
+                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% match to entity list"
+                else:
+                    owner_match = 'Fail'
+                    owner_mismatch_reason = f"Owner {round(best_owner_score,0)}%, Scraped Owner {round(best_scraped_score,0)}% — not both above 80%"
+            
+            elif org == 'amherst':
+                best_owner_score = 0
+                best_scraped_score = 0
+                for entity in amherst_entities: 
                     best_owner_score = max(best_owner_score, fuzzy(row['Owner'], entity))
                     best_scraped_score = max(best_scraped_score, fuzzy(row['Scraped Owner'], entity))
 
@@ -263,9 +352,15 @@ if uploaded_file is not None:
                 tp_owner = row['Owner'].upper()
                 scraped_owner = row['Scraped Owner'].upper()
                 similarity = SequenceMatcher(None, tp_owner, scraped_owner).ratio()
-                if similarity >= 0.75:
+                
+                if similarity == 1:
+                    owner_match = "Pass"
+                    owner_mismatch_reason = f"Exact match ({similarity:.0%})"
+                
+                elif similarity >= 0.75:
                     owner_match = "Pass"
                     owner_mismatch_reason = f"Similar enough ({similarity:.0%})"
+                
                 else:
                     owner_match = "Fail"
                     owner_mismatch_reason = f"Too dissimilar ({similarity:.0%})"
@@ -289,3 +384,4 @@ if uploaded_file is not None:
             file_name="validated_results.csv",
             mime='text/csv',
         )
+ 
