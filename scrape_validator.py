@@ -1,4 +1,3 @@
-
 import re
 import pandas as pd
 import streamlit as st
@@ -7,9 +6,12 @@ from rapidfuzz import fuzz
 from scourgify import normalize_address_record
 from scourgify.normalize import format_address_record, UnParseableAddressError
 
+# =========================================
+# 1) ENTITY LISTS (paste your lists below)
+# =========================================
 
 progress_entities = [
-    "Berm FW Residential Home Buyer Atlanta, LLC",
+   "Berm FW Residential Home Buyer Atlanta, LLC",
     "Berm FW Residential Home Buyer Charlotte, LLC",
     "Berm FW Residential Home Buyer Dallas, LLC",
     "Berm FW Residential Home Buyer Houston, LLC",
@@ -185,9 +187,8 @@ progress_entities = [
     "Yamasa Co., Ltd."
 ]
 
-
 amherst_entities = [
-     "ALTO Asset Company 1, LLC",
+      "ALTO Asset Company 1, LLC",
     "ALTO Asset Company 2, LLC",
     "ALTO Asset Company 3, LLC",
     "ALTO Asset Company 4, LLC",
@@ -252,15 +253,12 @@ amherst_entities = [
     "VM Pronto, LLC",
     "VMP Lockhart Properties, LLC",
     "VMP Scattered Properties, LLC"
-    
 ]
-
 
 # =========================================
 # 2) HELPERS
 # =========================================
 
-# Normalize company suffixes and punctuation for reliable fuzzy matching
 _CORP_SUFFIX_RE = re.compile(
     r'\b(l\.?l\.?c\.?|inc\.?|co\.?|ltd\.?|company|holdings?)\b',
     re.IGNORECASE
@@ -269,65 +267,39 @@ _CORP_SUFFIX_RE = re.compile(
 def clean_text(s: str) -> str:
     s = str(s or "")
     s = s.lower()
-    # remove common punctuation
     s = re.sub(r'[,\.\-\(\)]', ' ', s)
-    # remove common corporate suffixes
     s = _CORP_SUFFIX_RE.sub(' ', s)
-    # squeeze spaces
     s = re.sub(r'\s+', ' ', s).strip()
     return s
 
 def best_entity_match(name: str, entities: list[str]):
-    """
-    Return (best_entity_name, score) for a given name vs a list of entities,
-    using token_set_ratio to be robust to word order and extra tokens.
-    """
     name_norm = clean_text(name)
-    best_entity = ""
-    best_score = 0
+    best_entity, best_score = "", 0
     for ent in entities:
         score = fuzz.token_set_ratio(name_norm, clean_text(ent))
         if score > best_score:
-            best_score = score
-            best_entity = ent
+            best_entity, best_score = ent, score
     return best_entity, best_score
 
-def owners_match_progress_amherst(owner: str, scraped_owner: str, entities: list[str], threshold: int = 87):
-    """
-    Both names must map above threshold to the SAME canonical entity to pass.
-    Returns (pass_bool, reason_if_fail_or_blank_on_pass).
-    """
+def owners_match_progress_amherst(owner: str, scraped_owner: str, entities: list[str], threshold: int = 80):
     ent_a, sc_a = best_entity_match(owner, entities)
     ent_b, sc_b = best_entity_match(scraped_owner, entities)
 
     if sc_a >= threshold and sc_b >= threshold and ent_a == ent_b:
-        return True, ""  # blank reason on pass
+        return True, ""
     return False, (
         f"Different/weak entity: Owner→'{ent_a}' ({sc_a}%), "
         f"Scraped→'{ent_b}' ({sc_b}%)"
     )
 
-def owners_match_general(a: str, b: str, strict_threshold: int = 92, soft_threshold: int = 88):
-    """
-    Token-set similarity on normalized names.
-    - >= strict_threshold => Pass
-    - [soft_threshold, strict_threshold) => Fail (borderline) to be strict
-    - < soft_threshold => Fail
-    Returns (pass_bool, reason_if_fail_or_blank_on_pass).
-    """
+def owners_match_general(a: str, b: str, threshold: int = 80):
     sim = fuzz.token_set_ratio(clean_text(a), clean_text(b))
-    if sim >= strict_threshold:
+    if sim >= threshold:
         return True, ""
-    elif sim >= soft_threshold:
-        return False, f"Borderline similarity ({sim}%)"
     else:
         return False, f"Too dissimilar ({sim}%)"
 
-def compare_addresses(tp_addr: str, scraped_addr: str, include_city_state_zip: bool = False):
-    """
-    Parse both addresses with scourgify -> usaddress and compare components.
-    Returns (pass_bool, reason_if_fail_or_blank_on_pass).
-    """
+def compare_addresses(tp_addr: str, scraped_addr: str):
     try:
         fmt_tp = format_address_record(normalize_address_record(tp_addr or ""))
         fmt_sc = format_address_record(normalize_address_record((scraped_addr or "").replace('\n', ' ')))
@@ -335,7 +307,6 @@ def compare_addresses(tp_addr: str, scraped_addr: str, include_city_state_zip: b
         tp_tags, _ = usaddress.tag(fmt_tp)
         sc_tags, _ = usaddress.tag(fmt_sc)
 
-        # Base components that define street identity
         components = [
             'AddressNumber',
             'StreetName',
@@ -343,10 +314,6 @@ def compare_addresses(tp_addr: str, scraped_addr: str, include_city_state_zip: b
             'StreetNamePostType',
             'StreetNamePostDirectional',
         ]
-
-        # Optionally include broader geography/unit
-        if include_city_state_zip:
-            components += ['PlaceName', 'StateName', 'ZipCode', 'OccupancyIdentifier']
 
         mismatches = []
         for comp in components:
@@ -357,7 +324,7 @@ def compare_addresses(tp_addr: str, scraped_addr: str, include_city_state_zip: b
 
         if mismatches:
             return False, "; ".join(mismatches)
-        return True, ""  # blank reason on pass
+        return True, ""
 
     except (UnParseableAddressError, Exception) as e:
         return False, f"Address parsing error: {e}"
@@ -371,22 +338,6 @@ st.set_page_config(page_title="Scraping Validator Tool", page_icon="📋", layou
 st.title("📋 Scraping Validator Tool")
 st.write("Upload a CSV with columns: **Address**, **Scraped Address**, **Owner**, **Scraped Owner**, **Org**")
 
-with st.expander("Options", expanded=False):
-    colA, colB, colC = st.columns(3)
-    with colA:
-        pa_threshold = st.slider("Progress/Amherst Threshold", 80, 100, 87, 1)
-    with colB:
-        strict_owner_threshold = st.slider("General Owner Strict Threshold", 85, 100, 92, 1)
-    with colC:
-        soft_owner_threshold = st.slider("General Owner Soft Threshold", 80, 95, 88, 1)
-
-    colD, colE = st.columns(2)
-    with colD:
-        include_city_state_zip = st.checkbox("Include City/State/ZIP/Unit in Address Compare", value=False,
-                                             help="When on, city/state/ZIP/unit must also match.")
-    with colE:
-        show_only_fails = st.checkbox("Show only failures in the table", value=False)
-
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
 required_columns = ['Address', 'Scraped Address', 'Owner', 'Scraped Owner', 'Org']
@@ -396,31 +347,21 @@ validation_cols = [
 ]
 
 if uploaded_file is not None:
-    # Read & clean
     df = pd.read_csv(uploaded_file)
     df.columns = df.columns.str.strip()
 
-    # Check required columns
     missing = [c for c in required_columns if c not in df.columns]
     if missing:
         st.error(f"❌ Missing required columns: {missing}")
         st.stop()
 
-    # Normalize whitespace & NAs
     df = df.applymap(lambda x: str(x).strip() if isinstance(x, str) else x).fillna('')
-
-    # Drop any old validation columns from prior runs
     df = df.drop(columns=[c for c in validation_cols if c in df.columns])
 
-    # Compute results row-by-row
     results = []
     for _, row in df.iterrows():
         # ---------- Address ----------
-        addr_pass, addr_reason = compare_addresses(
-            row['Address'],
-            row['Scraped Address'],
-            include_city_state_zip=include_city_state_zip
-        )
+        addr_pass, addr_reason = compare_addresses(row['Address'], row['Scraped Address'])
         address_match = "Pass" if addr_pass else "Fail"
         address_reason = "" if addr_pass else addr_reason
 
@@ -433,19 +374,11 @@ if uploaded_file is not None:
             owner_pass = True
             owner_reason = ""
         elif org == 'progress residential':
-            owner_pass, owner_reason = owners_match_progress_amherst(
-                owner, scraped_owner, progress_entities, threshold=pa_threshold
-            )
+            owner_pass, owner_reason = owners_match_progress_amherst(owner, scraped_owner, progress_entities, threshold=80)
         elif org == 'amherst':
-            owner_pass, owner_reason = owners_match_progress_amherst(
-                owner, scraped_owner, amherst_entities, threshold=pa_threshold
-            )
+            owner_pass, owner_reason = owners_match_progress_amherst(owner, scraped_owner, amherst_entities, threshold=80)
         else:
-            owner_pass, owner_reason = owners_match_general(
-                owner, scraped_owner,
-                strict_threshold=strict_owner_threshold,
-                soft_threshold=soft_owner_threshold
-            )
+            owner_pass, owner_reason = owners_match_general(owner, scraped_owner, threshold=80)
 
         owner_match = "Pass" if owner_pass else "Fail"
         owner_reason_out = "" if owner_pass else owner_reason
@@ -459,28 +392,9 @@ if uploaded_file is not None:
 
     result_df = pd.concat([df, pd.DataFrame(results)], axis=1)
 
-    # Summary chips
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric("Address Pass", int((result_df["Address Match"] == "Pass").sum()))
-    with col2:
-        st.metric("Address Fail", int((result_df["Address Match"] == "Fail").sum()))
-    with col3:
-        st.metric("Owner Pass", int((result_df["Owner Match"] == "Pass").sum()))
-    with col4:
-        st.metric("Owner Fail", int((result_df["Owner Match"] == "Fail").sum()))
-
-    # Optionally filter to only failures for display
-    display_df = result_df.copy()
-    if show_only_fails:
-        display_df = display_df[
-            (display_df["Address Match"] == "Fail") | (display_df["Owner Match"] == "Fail")
-        ]
-
     st.subheader("🔍 Validation Results")
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(result_df, use_container_width=True)
 
-    # Download
     csv_bytes = result_df.to_csv(index=False).encode('utf-8')
     st.download_button(
         label="⬇️ Download Results as CSV",
@@ -491,5 +405,3 @@ if uploaded_file is not None:
 
 else:
     st.info("Upload a CSV to begin.")
-
- 
